@@ -1,37 +1,153 @@
-# Signal Timing Analyzers | 클록·SSI 분석기
+<a id="readme-top"></a>
 
-원시 디지털 파형을 주파수·간격·프레임 패턴 단위로 해석하고 비정상 신호를 구분하기 위한 Saleae 확장 모음이다.
+![Signal Timing Analyzers: Turn operating-status pulses into inspectable timing evidence](docs/assets/overview.svg)
 
-## 기술과 구성
+# Signal Timing Analyzers
 
-C++ · Python · CMake · Saleae Analyzer SDK
+**Turn operating-status pulses into inspectable timing evidence.**
+
+Check periodic signals used to confirm normal operation of a marine control and monitoring module, and make timing deviations and selected noise/glitch conditions visible during Type Approval testing.
+
+| At a glance | |
+|---|---|
+| Context | Marine Signal Diagnostics |
+| Current evidence | Author-confirmed test use; C++ plugins and real captures not rebuilt here |
+| Stack | C++, Python, CMake, Saleae Analyzer SDK, Logic 2 HLA interface |
+| Author | [hupositoc](https://github.com/hupositoc) |
+
+[Case study](docs/case-study.md) · [Architecture](docs/architecture.md) · [Validation](docs/validation.md) · [Design rationale](docs/design-rationale.md)
+
+## Table of Contents
+
+- [About The Project](#about-the-project)
+- [Getting Started](#getting-started)
+- [Usage](#usage)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
+- [Acknowledgments](#acknowledgments)
+
+## About The Project
+
+### Why I built it
+
+The operating context is marine module testing associated with DNV-CG-0339 and LR-TS-01. The specific product, employer, test laboratory, acceptance limits and private recordings are not disclosed.
+
+Raw digital transitions do not directly answer whether a periodic health signal remained normal. Short glitches and noisy edges can also create misleading decoded bits or frequency estimates. An operator needs a repeatable way to inspect the timing, identify exceptions, and distinguish raw events from tolerated or repaired interpretations.
+
+### What I implemented
+
+Use C++ low-level analyzers where direct access to sampled transitions is needed, and a Python high-level analyzer for grouped SPI-derived bit frames. Keep frequency expectations, edge selection and glitch-width settings visible. Include timing and correction metadata in analyzer output so a repaired interpretation is not mistaken for the original waveform.
+
+### What this made possible
+
+- Inspect expected-clock frequency and timing deviations at the captured-signal level.
+- Decode SSI-related CLK/DATA behavior with selectable sampling edges and a configurable short-pulse threshold.
+- Review grouped patterns and reported correction reasons instead of manually counting every transition.
+
+### What happened in practice
+
+The author confirms use for periodic normal-operation checks and the addition of filtering for some glitch/noise data. This supports analysis of performance logs; the repository does not claim that filtering establishes electrical immunity or proves compliance with every acceptance criterion.
+
+### Built With
+
+C++, Python, CMake, Saleae Analyzer SDK, Logic 2 HLA interface. Dependencies provide integration capabilities; the source links below identify the project-specific behavior.
+
+### Engineering decisions
+
+### Two levels of analysis
+
+LLA code can examine sampled edges directly, while the HLA can reason about already decoded frames. These are complementary integration points, not duplicate implementations.
+
+### Expose tolerances
+
+The expected frequency and glitch threshold are test parameters. Their defaults are examples from this codebase, not requirements taken from a class rule.
+
+### Preserve diagnostic meaning
+
+Tolerance and correction logic should explain what was accepted and why. A clean-looking interpreted frame is not a replacement for the raw capture.
+
+### Code to inspect
+
+| Source entry point | Responsibility |
+|---|---|
+| [`SimpleSerialAnalyzer::WorkerThread`](clock-lla/src/SimpleSerialAnalyzer.cpp#L35) | Converts sampled edge intervals into clock-analysis output. |
+| [`mExpectedFrequencyHz`](clock-lla/src/SimpleSerialAnalyzerSettings.cpp#L6) | Exposes expected frequency; the current code default is 300 Hz. |
+| [`SimpleSerialAnalyzer::WorkerThread`](ssi-lla/src/SimpleSerialAnalyzer.cpp#L49) | Processes CLK/DATA edges and short clock pulses. |
+| [`mGlitchPulseWidthLimitNs`](ssi-lla/src/SimpleSerialAnalyzerSettings.cpp#L8) | Configurable pulse-width threshold; current default 500 ns. |
+| [`try_remove_glitch_bits`](hla/HighLevelAnalyzer.py#L218) | Attempts explicitly reported extra-bit recovery. |
+| [`try_correct_bit_value_jitter_by_hamming`](hla/HighLevelAnalyzer.py#L829) | Checks tolerated bit differences against configured patterns. |
+
+### AI-assisted engineering
+
+I use AI development tools to turn concrete needs into working software. My engineering responsibilities include defining the problem, interpreting the operating constraints, reviewing behavior, investigating failures and checking results. AI assistance is a development method; it is not evidence that a feature works. File-by-file AI authorship or a specific assistant/model is not claimed without the corresponding development record.
+
+## Getting Started
+
+### Prerequisites
+
+CMake, a compatible C++ compiler, Saleae Analyzer SDK access, and Logic 2. Load hla/ as a developer extension for the Python path.
+
+### Installation
 
 ```text
-clock-lla/: 클록 주파수 검사
-ssi-lla/: CLK/DATA 분석
-hla/: SPI 출력 프레임에 대한 패턴·간격 해석
+git clone https://github.com/hupositoc/signal-timing-analyzers.git
+cd signal-timing-analyzers
 ```
 
-## 엔지니어링 관점
+Then follow the project-specific path:
 
-HLA와 LLA의 역할 분리, 샘플 수와 시간 단위 변환, 타이밍 허용오차, 글리치 필터링. 두 C++ 플러그인은 같은 SDK 샘플 구조에서 파생되어 각각 별도로 빌드한다.
+```text
+cmake -S clock-lla -B build/clock
+cmake --build build/clock --config Release
+cmake -S ssi-lla -B build/ssi
+cmake --build build/ssi --config Release
+```
 
-## AI를 활용한 개발 방식
+The commands describe the intended setup. See the validation record for which parts were actually executed in the current environment.
 
-이 프로젝트는 AI 개발 도구를 활용한 문제 해결 포트폴리오의 일부다. AI가 코드를 작성했다는 사실보다 문제 정의, 기술 선택, 결과 검토, 실패 원인 분석과 검증 근거를 중심으로 설명한다. 원본 개발 대화 전체는 확인하지 못했으므로 파일별 수작업·AI 작성 비율이나 사용 모델은 추정하지 않는다.
+## Usage
 
-## 시작하기
+![Four-stage workflow for Signal Timing Analyzers](docs/assets/workflow.svg)
 
-각 LLA 폴더에서 CMake를 별도로 구성한다. 예: `cmake -S clock-lla -B build/clock` 이후 `cmake --build build/clock --config Release`.
+**Text equivalent:** Captured transitions → Edge / glitch checks → Frequency / frame checks → Annotated exports.
 
-두 플러그인의 CMake target 이름은 동일하므로 하나의 build 폴더를 공유하지 않는다. HLA는 Logic 2의 Extensions에서 `hla/`를 개발 확장으로 불러온다. 외부 SDK 다운로드가 필요하며 이번에 빌드하지 않았다.
+Start by defining the intended input and expected behavior. Save the configuration with the experiment or test session so that an output can be interpreted later. Review exceptions and raw evidence before treating a summary as a final conclusion.
 
-## 실행과 현재 상태
+Python HLA syntax was parsed. Source paths, current defaults and exported result fields were inspected. No hardware-equivalence or filtering-performance claim is made.
 
-Saleae SDK·Logic 2와 C++ 도구 체인이 필요하다. 원본 SDK LICENSE를 보존했다. 패턴·허용오차 기본값은 특정 용도에 맞춘 값이므로 범용 성능 보장으로 해석하지 않는다. 빌드·실제 파형 재생은 미검증이다.
+### Boundaries and known limitations
 
-이번 공개 준비에서는 원본의 선별 복사와 정적 점검을 수행했다. 지원 도구·장비가 없는 환경에서 실행 성공, 운영 성과, 모델 정확도를 새로 확인한 것으로 주장하지 않는다. 상세 검증 결과는 `VALIDATION.md`에 기록한다.
+- Signal patterns and default thresholds are application-specific examples.
+- C++ plugins share a CMake target name and must be configured in separate build directories.
+- SDK build, electrical sampling accuracy, false-positive/false-negative rates and captured-waveform replay remain unverified here.
 
-## 출처·공개 범위
+Read the [case study](docs/case-study.md) for the purpose and enabled workflow, and [architecture](docs/architecture.md) for the source-level explanation. The [validation document](docs/validation.md) separates verified checks, author-reported use and pending integration work.
 
-원본 작업 폴더에서 소스를 선별한 공개 준비본이다. 로그·자격증명·로컬 SDK 경로·실제 업무 데이터·실행 바이너리는 제외했다. 기존 저작권 고지와 제3자 라이선스는 유지한다. 원본 파일의 고지와 의존성 이용 조건이 적용되며, 이 저장소의 문서가 새 라이선스를 부여하지 않는다.
+## Roadmap
+
+- [ ] Create public fixtures for nominal, missing-edge, extra-edge and invalid-pattern cases.
+- [ ] Measure detection behavior against manually labeled synthetic waveforms.
+- [ ] Document threshold selection separately from the applicable test acceptance criteria.
+
+These are planned tasks, not completed capabilities.
+
+## Contributing
+
+Use an issue to describe a reproducible problem, expected behavior, actual behavior and the environment. For a change, keep the scope focused and attach the relevant test or recording. Do not submit private customer data, identifying test captures, credentials or confidential certification documents.
+
+## License
+
+Existing file-level notices and third-party licenses remain in force. A repository-wide open-source license has not been selected for all archived material. Public visibility does not grant rights beyond those existing terms. Documentation structure attribution does not relicense the software.
+
+## Contact
+
+[hupositoc on GitHub](https://github.com/hupositoc) · [Project issues](https://github.com/hupositoc/signal-timing-analyzers/issues)
+
+## Acknowledgments
+
+The top-level section order follows [Best-README-Template](https://github.com/othneildrew/Best-README-Template), reviewed under its [Unlicense](https://github.com/othneildrew/Best-README-Template/blob/main/LICENSE.txt). All project narratives are written for this implementation. Visual guidance is attributed in [design rationale](docs/design-rationale.md). The broader 50-repository documentation review informs the reading order, source links and evidence presentation; it does not imply endorsement by those projects.
+
+
+[Engineering decision record](docs/engineering-decisions.md) · [Review of 50 reference repositories](docs/reference-review-50.md)
