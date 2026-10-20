@@ -1,0 +1,13 @@
+{
+  "name": "Signal Analyzer",
+  "apiVersion": "1.0.0",
+  "author": "Saleae",
+  "version": "0.0.1",
+  "description": "",
+  "extensions": {
+    "Signal Analyzer": {
+      "type": "HighLevelAnalyzer",
+      "entryPoint": "HighLevelAnalyzer.Hla"
+    }
+  }
+}
